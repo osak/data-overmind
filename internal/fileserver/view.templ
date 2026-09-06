@@ -1,0 +1,264 @@
+package fileserver
+
+templ browserPage(data pageData) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="color-scheme" content="light dark"/>
+			<title>{ data.RootName } — Files</title>
+			@templ.Raw("<style>" + styles + "</style>")
+		</head>
+		<body>
+			<header class="toolbar">
+				<a class="brand" href="/" aria-label="Go to the root directory">
+					<span class="folder-mark" aria-hidden="true"></span>
+					<span>
+						<strong>{ data.RootName }</strong>
+						<small>{ data.RootPath }</small>
+					</span>
+				</a>
+				<nav class="breadcrumbs" aria-label="Current directory">
+					for index, crumb := range data.Breadcrumbs {
+						if index > 0 {
+							<span class="breadcrumb-separator" aria-hidden="true">›</span>
+						}
+						<a
+							href={ templ.SafeURL(crumb.Href) }
+							class={ templ.KV("breadcrumb current", crumb.Current), templ.KV("breadcrumb", !crumb.Current) }
+							if crumb.Current {
+								aria-current="page"
+							}
+						>{ crumb.Name }</a>
+					}
+				</nav>
+				<div class="toolbar-label">Local file browser</div>
+			</header>
+			<main class="browser" aria-label="Files in the current directory">
+				<section class="columns" aria-label="Directory columns">
+					for _, column := range data.Columns {
+						@fileColumn(column)
+					}
+				</section>
+				if data.Preview != nil {
+					@filePreview(*data.Preview)
+				} else {
+					<section class="preview empty-preview">
+						<div class="empty-symbol" aria-hidden="true">⌁</div>
+						<h1>Select a file</h1>
+						<p>Choose an item to inspect it here.</p>
+					</section>
+				}
+			</main>
+		</body>
+	</html>
+}
+
+templ fileColumn(column columnView) {
+	<section class="column" aria-label={ column.Title }>
+		<h2>{ column.Title }</h2>
+		<div class="entries">
+			if len(column.Entries) == 0 {
+				<p class="empty-column">Empty folder</p>
+			}
+			for _, entry := range column.Entries {
+				if entry.Accessible {
+					<a
+						href={ templ.SafeURL(entry.Href) }
+						if entry.Target != "" {
+							target={ entry.Target }
+							rel="noreferrer"
+						}
+						class={ templ.KV("entry active", entry.Active), templ.KV("entry", !entry.Active) }
+					>
+						<span class={ "entry-icon", entry.Kind } aria-hidden="true">{ entry.Icon }</span>
+						<span class="entry-copy">
+							<strong>{ entry.Name }</strong>
+							<small>{ entry.Meta }</small>
+						</span>
+						if entry.Kind == "directory" {
+							<span class="chevron" aria-hidden="true">›</span>
+						} else if entry.Kind == "html" {
+							<span class="external" aria-hidden="true">↗</span>
+						}
+					</a>
+				} else {
+					<div class="entry unavailable" title="This link points outside the served directory">
+						<span class="entry-icon" aria-hidden="true">×</span>
+						<span class="entry-copy"><strong>{ entry.Name }</strong><small>{ entry.Meta }</small></span>
+					</div>
+				}
+			}
+		</div>
+	</section>
+}
+
+templ filePreview(preview previewView) {
+	<section class="preview">
+		<header class="preview-header">
+			<div>
+				<h1>{ preview.Name }</h1>
+				<p>{ preview.Meta }</p>
+			</div>
+			<div class="actions">
+				if preview.Kind != "directory" {
+					<a class="button secondary" href={ templ.SafeURL(preview.Download) }>Download</a>
+				}
+				if preview.OpenNewTab {
+					<a class="button" href={ templ.SafeURL(preview.URL) } target="_blank" rel="noreferrer">Open HTML ↗</a>
+				} else if preview.Kind == "unsupported" {
+					<a class="button" href={ templ.SafeURL(preview.URL) } target="_blank" rel="noreferrer">Open file ↗</a>
+				}
+			</div>
+		</header>
+		<div class="preview-content">
+			switch preview.Kind {
+				case "directory":
+					<div class="preview-message"><span class="large-icon folder-mark"></span><p>Select an item in this folder.</p></div>
+				case "markdown":
+					<article class="markdown">@templ.Raw(preview.HTML)</article>
+				case "text":
+					<pre class="text-preview"><code>{ preview.HTML }</code></pre>
+				case "image":
+					<div class="media-stage"><img src={ templ.SafeURL(preview.URL) } alt={ preview.Name }/></div>
+				case "audio":
+					<div class="media-stage"><audio controls preload="metadata" src={ templ.SafeURL(preview.URL) }></audio></div>
+				case "video":
+					<div class="media-stage"><video controls preload="metadata" src={ templ.SafeURL(preview.URL) }></video></div>
+				case "pdf":
+					<iframe class="pdf-preview" src={ templ.SafeURL(preview.URL) } title={ preview.Name }></iframe>
+				case "html":
+					<div class="preview-message"><div class="html-badge">HTML</div><p>HTML files open directly in a new tab.</p><a href={ templ.SafeURL(preview.URL) } target="_blank" rel="noreferrer">Open now ↗</a></div>
+				default:
+					<div class="preview-message"><div class="empty-symbol">◇</div><p>A browser preview is not available for this file type.</p></div>
+			}
+			if preview.Truncated {
+				<p class="truncated">Preview limited to the first 1 MiB.</p>
+			}
+		</div>
+	</section>
+}
+
+var styles = `
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f7;
+  --surface: rgba(255, 255, 255, .78);
+  --surface-solid: #fff;
+  --line: rgba(15, 23, 42, .12);
+  --text: #172033;
+  --muted: #697386;
+  --accent: #1677ff;
+  --accent-soft: #e8f2ff;
+  --hover: rgba(15, 23, 42, .055);
+  --shadow: 0 18px 55px rgba(33, 43, 54, .10);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: radial-gradient(circle at 15% 0%, #fff 0, transparent 36%), var(--bg);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+a { color: inherit; }
+.toolbar {
+  height: 70px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr) minmax(150px, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+}
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; text-decoration: none; }
+.brand strong, .brand small { display: block; }
+.brand strong { font-size: 15px; letter-spacing: -.01em; }
+.brand small { max-width: 60vw; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.folder-mark { position: relative; width: 30px; height: 22px; border-radius: 5px; background: linear-gradient(145deg, #69b7ff, #2385f4); box-shadow: inset 0 1px rgba(255,255,255,.4); }
+.folder-mark::before { position: absolute; top: -4px; left: 3px; width: 13px; height: 7px; border-radius: 4px 4px 0 0; background: #56aafc; content: ""; }
+.breadcrumbs { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 5px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+.breadcrumbs::-webkit-scrollbar { display: none; }
+.breadcrumb { max-width: 180px; overflow: hidden; padding: 5px 7px; border-radius: 6px; color: var(--muted); font-size: 12px; font-weight: 550; text-decoration: none; text-overflow: ellipsis; }
+.breadcrumb:hover { color: var(--text); background: var(--hover); }
+.breadcrumb.current { color: var(--text); background: var(--hover); }
+.breadcrumb-separator { color: var(--muted); opacity: .65; }
+.toolbar-label { justify-self: end; color: var(--muted); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.browser { display: grid; grid-template-columns: minmax(300px, 46vw) minmax(390px, 1fr); height: calc(100vh - 70px); }
+.columns { display: flex; min-width: 0; overflow-x: auto; overflow-y: hidden; border-right: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); }
+.column { width: 260px; min-width: 220px; height: 100%; overflow-y: auto; border-right: 1px solid var(--line); }
+.column h2 { position: sticky; z-index: 2; top: 0; margin: 0; padding: 14px 14px 9px; overflow: hidden; color: var(--muted); background: var(--surface-solid); font-size: 11px; letter-spacing: .05em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.entries { padding: 4px 7px 14px; }
+.entry { min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 8px; text-decoration: none; }
+.entry:hover { background: var(--hover); }
+.entry:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.entry.active { color: #fff; background: var(--accent); }
+.entry-icon { width: 25px; flex: 0 0 25px; color: #75829a; font-size: 15px; font-weight: 700; text-align: center; }
+.entry-icon.directory { color: #3b97ef; font-size: 23px; }
+.entry-icon.markdown { color: #576579; font-size: 11px; }
+.entry.active .entry-icon, .entry.active small { color: rgba(255,255,255,.85); }
+.entry-copy { min-width: 0; flex: 1; }
+.entry-copy strong, .entry-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-copy strong { font-size: 13px; font-weight: 550; }
+.entry-copy small { color: var(--muted); font-size: 10px; }
+.chevron, .external { color: var(--muted); font-size: 18px; }
+.entry.active .chevron { color: #fff; }
+.unavailable { opacity: .45; cursor: not-allowed; }
+.empty-column { padding: 24px 10px; color: var(--muted); text-align: center; }
+.preview { min-width: 0; height: 100%; overflow-y: auto; background: rgba(255,255,255,.42); }
+.preview-header { position: sticky; z-index: 3; top: 0; min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--surface); backdrop-filter: blur(18px); }
+.preview-header h1 { margin: 0; overflow-wrap: anywhere; font-size: 18px; letter-spacing: -.02em; }
+.preview-header p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+.actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.button { display: inline-flex; align-items: center; min-height: 33px; padding: 6px 12px; border: 1px solid var(--accent); border-radius: 8px; color: #fff; background: var(--accent); font-size: 12px; font-weight: 600; text-decoration: none; }
+.button.secondary { border-color: var(--line); color: var(--text); background: var(--surface-solid); }
+.preview-content { min-height: calc(100% - 76px); padding: clamp(20px, 4vw, 52px); }
+.empty-preview { display: grid; align-content: center; justify-items: center; padding: 30px; color: var(--muted); text-align: center; }
+.empty-preview h1 { margin: 12px 0 0; color: var(--text); font-size: 18px; }
+.empty-preview p { margin: 5px 0; }
+.empty-symbol { font-size: 42px; font-weight: 200; }
+.preview-message { min-height: 55vh; display: grid; align-content: center; justify-items: center; gap: 10px; color: var(--muted); text-align: center; }
+.preview-message .large-icon { width: 72px; height: 52px; }
+.preview-message a { color: var(--accent); font-weight: 600; }
+.html-badge { padding: 14px; border: 1px solid var(--line); border-radius: 12px; color: #e05d44; background: var(--surface-solid); font-weight: 800; letter-spacing: .04em; }
+.markdown { max-width: 760px; margin: 0 auto; color: #263247; font-family: ui-serif, Georgia, serif; font-size: 16px; line-height: 1.7; }
+.markdown h1, .markdown h2, .markdown h3 { margin: 1.5em 0 .5em; color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.2; letter-spacing: -.025em; }
+.markdown h1:first-child { margin-top: 0; }
+.markdown h1 { font-size: 2em; }
+.markdown h2 { padding-bottom: .25em; border-bottom: 1px solid var(--line); font-size: 1.45em; }
+.markdown h3 { font-size: 1.15em; }
+.markdown a { color: var(--accent); }
+.markdown img { max-width: 100%; border-radius: 10px; }
+.markdown code { padding: .15em .35em; border-radius: 4px; background: rgba(100,116,139,.13); font: .86em ui-monospace, SFMono-Regular, Menlo, monospace; }
+.markdown pre, .text-preview { overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: #101622; color: #dce6f5; }
+.markdown pre code { padding: 0; background: transparent; }
+.markdown blockquote { margin-left: 0; padding-left: 1em; border-left: 3px solid #8dbff7; color: var(--muted); }
+.text-preview { max-width: 100%; margin: 0; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.media-stage { min-height: 60vh; display: grid; place-items: center; }
+.media-stage img, .media-stage video { max-width: 100%; max-height: 72vh; border-radius: 10px; box-shadow: var(--shadow); }
+.media-stage audio { width: min(540px, 100%); }
+.pdf-preview { width: 100%; height: 72vh; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.truncated { max-width: 760px; margin: 14px auto; color: var(--muted); font-size: 11px; text-align: right; }
+@media (max-width: 820px) {
+  body { overflow: auto; }
+  .toolbar { height: 96px; grid-template-columns: 1fr; grid-template-rows: 54px 34px; gap: 0; padding: 0 15px 8px; }
+  .brand small, .toolbar-label { display: none; }
+  .breadcrumbs { width: 100%; justify-content: flex-start; }
+  .browser { display: block; height: auto; }
+  .columns { height: 46vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .column { min-width: 72vw; }
+  .preview { min-height: calc(54vh - 96px); }
+  .preview-header { align-items: flex-start; padding: 12px 15px; }
+  .preview-content { padding: 24px 15px; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0c111b; --surface: rgba(20, 27, 40, .82); --surface-solid: #151d2a; --line: rgba(226,232,240,.12); --text: #edf2f9; --muted: #98a5b8; --accent: #2789ff; --accent-soft: #102c4c; --hover: rgba(255,255,255,.055); --shadow: 0 18px 55px rgba(0,0,0,.3); }
+  body { background: radial-gradient(circle at 15% 0%, #172131 0, transparent 36%), var(--bg); }
+  .preview { background: rgba(10,15,24,.5); }
+  .markdown { color: #cbd5e3; }
+}
+`
