@@ -1,0 +1,1972 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Doc Template レビューフィードバック機能 — 実装計画</title>
+<style>
+/* inlined from ../../../ai-doc-template/assets/doc.css */
+/* ==========================================================================
+   AI Doc Template — doc.css
+   AI が出力する技術ドキュメント／レポートのための共通スタイルシート。
+
+   設計方針:
+     1. セマンティックHTMLだけで 8 割方きれいになる（クラス名の暗記を要求しない）
+     2. 見た目の決定はすべて CSS カスタムプロパティ（デザイントークン）に集約
+     3. ライト／ダーク両対応、印刷対応、日本語の可読性を最優先
+   詳細は DESIGN.md を参照。
+
+   目次:
+     01. デザイントークン（ライト）
+     02. ダークテーマ
+     03. リセット & ベース
+     04. レイアウト
+     05. 文書ヘッダ（タイトルブロック）
+     06. 見出し・本文タイポグラフィ
+     07. インライン要素
+     08. リスト
+     09. コード / pre
+     10. 表
+     11. コールアウト
+     12. 図・メディア
+     13. カード / グリッド
+     14. 目次サイドバー（TOC）
+     15. 脚注・フッタ
+     16. ユーティリティ
+     17. シンタックスハイライト（highlight.js 任意）
+     18. 印刷
+   ========================================================================== */
+
+/* ==========================================================================
+   01. デザイントークン（ライト）
+   ここだけ書き換えれば全体のトーンが変わる。
+   ========================================================================== */
+
+:root {
+  color-scheme: light dark;
+
+  /* --- タイプフェイス --- */
+  --doc-font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP",
+    "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+  --doc-font-serif:
+    "Iowan Old Style", Georgia, "Times New Roman",
+    "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  --doc-font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", "Noto Sans Mono", "Sarasa Mono J", monospace;
+  --doc-font-body: var(--doc-font-sans);
+
+  /* --- タイプスケール（1.20 倍・可変） --- */
+  --doc-size-base: 16px;
+  --doc-size-sm: 0.875rem;    /* 14px  補足・キャプション */
+  --doc-size-xs: 0.78rem;     /* 12.5px ラベル・メタ */
+  --doc-size-lg: 1.125rem;    /* 18px  リード文 */
+  --doc-size-h4: 1.0625rem;
+  --doc-size-h3: 1.25rem;
+  --doc-size-h2: clamp(1.4rem, 1.2rem + 0.7vw, 1.75rem);
+  --doc-size-h1: clamp(1.85rem, 1.4rem + 1.8vw, 2.6rem);
+
+  /* --- 行送り --- */
+  --doc-leading-body: 1.85;   /* 日本語の混植を前提にやや広め */
+  --doc-leading-tight: 1.45;  /* 見出し */
+  --doc-leading-code: 1.7;
+
+  /* --- 余白スケール（4px 基準） --- */
+  --doc-space-1: 0.25rem;
+  --doc-space-2: 0.5rem;
+  --doc-space-3: 0.75rem;
+  --doc-space-4: 1rem;
+  --doc-space-5: 1.5rem;
+  --doc-space-6: 2rem;
+  --doc-space-7: 3rem;
+  --doc-space-8: 4rem;
+
+  /* --- 寸法 --- */
+  --doc-measure: 46rem;       /* 本文の最大幅（約 40 文字／全角） */
+  --doc-toc-width: 17rem;
+  --doc-radius-sm: 4px;
+  --doc-radius-md: 8px;
+  --doc-radius-lg: 12px;
+  --doc-rule: 1px;
+
+  /* --- 色: 面 --- */
+  --doc-c-bg: #ffffff;
+  --doc-c-surface: #f7f8fa;
+  --doc-c-surface-2: #eef1f5;
+  --doc-c-border: #e0e4ea;
+  --doc-c-border-strong: #c3cad4;
+
+  /* --- 色: 文字 --- */
+  --doc-c-text: #1b1f24;
+  --doc-c-text-muted: #59616b;
+  --doc-c-text-faint: #858e99;
+
+  /* --- 色: アクセント --- */
+  --doc-c-accent: #1f5fa9;
+  --doc-c-accent-hover: #17497f;
+  --doc-c-accent-weak: #eaf1f9;
+  --doc-c-accent-line: #b9d0ea;
+
+  /* --- 色: 意味づけ（コールアウト等） --- */
+  --doc-c-info: #1f5fa9;      --doc-c-info-bg: #eaf1f9;    --doc-c-info-line: #b9d0ea;
+  --doc-c-success: #1c7a4e;   --doc-c-success-bg: #e8f4ed;  --doc-c-success-line: #b3ddc5;
+  --doc-c-warn: #8a5a12;      --doc-c-warn-bg: #fdf3e3;     --doc-c-warn-line: #e8cd9a;
+  --doc-c-danger: #b02a20;    --doc-c-danger-bg: #fdecea;   --doc-c-danger-line: #f0bdb8;
+  --doc-c-note: #5b4b9b;      --doc-c-note-bg: #f0edfa;     --doc-c-note-line: #cbc2ec;
+
+  /* --- 影 --- */
+  --doc-shadow-sm: 0 1px 2px rgba(16, 22, 32, 0.06);
+  --doc-shadow-md: 0 2px 8px rgba(16, 22, 32, 0.08);
+
+  /* --- 選択 / フォーカス --- */
+  --doc-c-selection: #cfe0f4;
+  --doc-c-focus: #1f5fa9;
+}
+
+/* 明朝で読ませたい報告書向け: <html data-doc-font="serif"> */
+[data-doc-font="serif"] { --doc-font-body: var(--doc-font-serif); }
+/* 本文幅を広げたい場合: <html data-doc-width="wide"> */
+[data-doc-width="wide"] { --doc-measure: 56rem; }
+[data-doc-width="full"] { --doc-measure: none; }
+
+/* ==========================================================================
+   02. ダークテーマ
+   OS 設定に自動追従。data-theme="light|dark" があればそちらが優先。
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --doc-c-bg: #14171a;
+    --doc-c-surface: #1a1e22;
+    --doc-c-surface-2: #22272c;
+    --doc-c-border: #2b3138;
+    --doc-c-border-strong: #414a54;
+
+    --doc-c-text: #e4e8ec;
+    --doc-c-text-muted: #a2acb7;
+    --doc-c-text-faint: #78828d;
+
+    --doc-c-accent: #7fb3f0;
+    --doc-c-accent-hover: #a3c9f6;
+    --doc-c-accent-weak: #16283d;
+    --doc-c-accent-line: #2f4f75;
+
+    --doc-c-info: #7fb3f0;    --doc-c-info-bg: #16283d;    --doc-c-info-line: #2f4f75;
+    --doc-c-success: #6cc99a; --doc-c-success-bg: #14291f;  --doc-c-success-line: #2c5741;
+    --doc-c-warn: #e0b054;    --doc-c-warn-bg: #2c2416;     --doc-c-warn-line: #5c4823;
+    --doc-c-danger: #ef8b81;  --doc-c-danger-bg: #301b19;   --doc-c-danger-line: #6b3630;
+    --doc-c-note: #ad9ee8;    --doc-c-note-bg: #221f33;     --doc-c-note-line: #443c66;
+
+    --doc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --doc-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.45);
+
+    --doc-c-selection: #27405e;
+    --doc-c-focus: #7fb3f0;
+  }
+}
+
+:root[data-theme="dark"] {
+  --doc-c-bg: #14171a;
+  --doc-c-surface: #1a1e22;
+  --doc-c-surface-2: #22272c;
+  --doc-c-border: #2b3138;
+  --doc-c-border-strong: #414a54;
+
+  --doc-c-text: #e4e8ec;
+  --doc-c-text-muted: #a2acb7;
+  --doc-c-text-faint: #78828d;
+
+  --doc-c-accent: #7fb3f0;
+  --doc-c-accent-hover: #a3c9f6;
+  --doc-c-accent-weak: #16283d;
+  --doc-c-accent-line: #2f4f75;
+
+  --doc-c-info: #7fb3f0;    --doc-c-info-bg: #16283d;    --doc-c-info-line: #2f4f75;
+  --doc-c-success: #6cc99a; --doc-c-success-bg: #14291f;  --doc-c-success-line: #2c5741;
+  --doc-c-warn: #e0b054;    --doc-c-warn-bg: #2c2416;     --doc-c-warn-line: #5c4823;
+  --doc-c-danger: #ef8b81;  --doc-c-danger-bg: #301b19;   --doc-c-danger-line: #6b3630;
+  --doc-c-note: #ad9ee8;    --doc-c-note-bg: #221f33;     --doc-c-note-line: #443c66;
+
+  --doc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --doc-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.45);
+
+  --doc-c-selection: #27405e;
+  --doc-c-focus: #7fb3f0;
+}
+
+/* ==========================================================================
+   03. リセット & ベース
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: var(--doc-size-base);
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--doc-space-6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--doc-c-bg);
+  color: var(--doc-c-text);
+  font-family: var(--doc-font-body);
+  font-size: 1rem;
+  line-height: var(--doc-leading-body);
+  font-feature-settings: "palt" 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* 日本語の折り返し: 禁則を守りつつ、長い英単語・URL は途中で折る */
+  word-break: normal;
+  overflow-wrap: anywhere;
+  line-break: strict;
+}
+
+::selection { background: var(--doc-c-selection); }
+
+:where(a, button, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--doc-c-focus);
+  outline-offset: 2px;
+  border-radius: var(--doc-radius-sm);
+}
+
+img, svg, video, canvas { max-width: 100%; height: auto; }
+
+/* ==========================================================================
+   04. レイアウト
+   .doc-layout > (.doc-toc | .doc-main)
+   ========================================================================== */
+
+.doc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 60rem) {
+  /* :not(:empty) — JS を無効にした場合や目次を生成しなかった場合は
+     空のサイドバーが場所を取らないよう 1 カラムに戻す */
+  .doc-layout:has(.doc-toc:not(:empty)) {
+    grid-template-columns: var(--doc-toc-width) minmax(0, 1fr);
+  }
+}
+
+.doc-main {
+  min-width: 0;
+  padding: var(--doc-space-7) var(--doc-space-5) var(--doc-space-8);
+}
+
+@media (min-width: 48rem) {
+  .doc-main { padding-inline: var(--doc-space-7); }
+}
+
+/* 本文カラム。ヘッダ・記事・フッタで共通の幅を持たせる */
+.doc-header,
+.doc-body,
+.doc-footer {
+  max-width: var(--doc-measure);
+  margin-inline: auto;
+}
+
+/* ==========================================================================
+   05. 文書ヘッダ（タイトルブロック）
+   ========================================================================== */
+
+.doc-header {
+  padding-bottom: var(--doc-space-5);
+  margin-bottom: var(--doc-space-6);
+  border-bottom: var(--doc-rule) solid var(--doc-c-border);
+}
+
+.doc-header .doc-eyebrow {
+  margin: 0 0 var(--doc-space-2);
+  font-size: var(--doc-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--doc-c-accent);
+}
+
+.doc-header h1 {
+  margin: 0;
+  font-size: var(--doc-size-h1);
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+  font-weight: 700;
+  font-feature-settings: "palt" 1;
+}
+
+.doc-header .doc-subtitle {
+  margin: var(--doc-space-3) 0 0;
+  font-size: var(--doc-size-lg);
+  line-height: 1.65;
+  color: var(--doc-c-text-muted);
+}
+
+/* メタ情報（作成日・バージョン・対象読者 …）: <dl class="doc-meta"> */
+.doc-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--doc-space-3) var(--doc-space-5);
+  margin: var(--doc-space-5) 0 0;
+  padding: 0;
+}
+
+.doc-meta dt {
+  font-size: var(--doc-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--doc-c-text-faint);
+  line-height: 1.5;
+}
+
+.doc-meta dd {
+  margin: 2px 0 0;
+  font-size: var(--doc-size-sm);
+  line-height: 1.6;
+  color: var(--doc-c-text);
+}
+
+/* <div><dt>…</dt><dd>…</dd></div> でグループ化しても、素の dt/dd 並びでも成立する */
+.doc-meta > div { min-width: 0; }
+.doc-meta dd { margin-left: 0; }
+
+/* ==========================================================================
+   06. 見出し・本文タイポグラフィ
+   ========================================================================== */
+
+.doc-body h2,
+.doc-body h3,
+.doc-body h4,
+.doc-body h5,
+.doc-body h6 {
+  line-height: var(--doc-leading-tight);
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  font-feature-settings: "palt" 1;
+  scroll-margin-top: var(--doc-space-6);
+  position: relative;
+}
+
+.doc-body h2 {
+  font-size: var(--doc-size-h2);
+  margin: var(--doc-space-8) 0 var(--doc-space-4);
+  padding-bottom: var(--doc-space-3);
+  border-bottom: var(--doc-rule) solid var(--doc-c-border);
+}
+
+.doc-body h3 {
+  font-size: var(--doc-size-h3);
+  margin: var(--doc-space-6) 0 var(--doc-space-3);
+}
+
+.doc-body h4 {
+  font-size: var(--doc-size-h4);
+  margin: var(--doc-space-5) 0 var(--doc-space-2);
+}
+
+.doc-body h5,
+.doc-body h6 {
+  font-size: 1rem;
+  margin: var(--doc-space-5) 0 var(--doc-space-2);
+  color: var(--doc-c-text-muted);
+}
+
+.doc-body > :first-child { margin-top: 0; }
+
+.doc-body p {
+  margin: 0 0 var(--doc-space-4);
+}
+
+/* リード文 */
+.doc-body .lead {
+  font-size: var(--doc-size-lg);
+  line-height: 1.8;
+  color: var(--doc-c-text-muted);
+  margin-bottom: var(--doc-space-6);
+}
+
+.doc-body hr {
+  border: 0;
+  border-top: var(--doc-rule) solid var(--doc-c-border);
+  margin: var(--doc-space-7) 0;
+}
+
+/* 見出しアンカー（doc.js が挿入） */
+.heading-anchor {
+  position: absolute;
+  left: -1.1em;
+  width: 1.1em;
+  text-align: center;
+  color: var(--doc-c-text-faint);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  font-weight: 400;
+}
+:is(h2, h3, h4):hover > .heading-anchor,
+.heading-anchor:focus-visible { opacity: 1; }
+@media (max-width: 60rem) { .heading-anchor { display: none; } }
+
+/* ==========================================================================
+   07. インライン要素
+   ========================================================================== */
+
+.doc-body a,
+.doc-footer a {
+  color: var(--doc-c-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: var(--doc-c-accent-line);
+  transition: color 0.12s ease, text-decoration-color 0.12s ease;
+}
+
+.doc-body a:hover,
+.doc-footer a:hover {
+  color: var(--doc-c-accent-hover);
+  text-decoration-color: currentColor;
+}
+
+.doc-body strong { font-weight: 700; }
+.doc-body em { font-style: italic; }
+
+.doc-body mark {
+  background: var(--doc-c-warn-bg);
+  color: inherit;
+  padding: 0.05em 0.25em;
+  border-radius: var(--doc-radius-sm);
+}
+
+.doc-body abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+.doc-body small { font-size: var(--doc-size-sm); color: var(--doc-c-text-muted); }
+
+kbd {
+  font-family: var(--doc-font-mono);
+  font-size: 0.82em;
+  padding: 0.15em 0.45em;
+  border: 1px solid var(--doc-c-border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--doc-radius-sm);
+  background: var(--doc-c-surface);
+  color: var(--doc-c-text);
+  white-space: nowrap;
+}
+
+/* ステータスバッジ: <span class="badge badge-success">承認済み</span> */
+.badge {
+  display: inline-block;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  font-size: var(--doc-size-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: var(--doc-c-surface-2);
+  color: var(--doc-c-text-muted);
+  border: 1px solid var(--doc-c-border);
+  vertical-align: 0.08em;
+}
+.badge-info    { background: var(--doc-c-info-bg);    color: var(--doc-c-info);    border-color: var(--doc-c-info-line); }
+.badge-success { background: var(--doc-c-success-bg); color: var(--doc-c-success); border-color: var(--doc-c-success-line); }
+.badge-warn    { background: var(--doc-c-warn-bg);    color: var(--doc-c-warn);    border-color: var(--doc-c-warn-line); }
+.badge-danger  { background: var(--doc-c-danger-bg);  color: var(--doc-c-danger);  border-color: var(--doc-c-danger-line); }
+
+/* ==========================================================================
+   08. リスト
+   ========================================================================== */
+
+.doc-body ul,
+.doc-body ol {
+  margin: 0 0 var(--doc-space-4);
+  padding-left: 1.6em;
+}
+
+.doc-body li { margin-bottom: var(--doc-space-2); }
+.doc-body li > ul,
+.doc-body li > ol { margin-top: var(--doc-space-2); margin-bottom: 0; }
+.doc-body li::marker { color: var(--doc-c-text-faint); }
+.doc-body ol > li::marker { color: var(--doc-c-text-muted); font-variant-numeric: tabular-nums; }
+
+/* チェックリスト: <ul class="checklist"><li><input type="checkbox" ...> */
+.doc-body ul.checklist {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.doc-body ul.checklist input[type="checkbox"] {
+  margin: 0;
+  translate: 0 0.15em;
+  accent-color: var(--doc-c-accent);
+}
+
+/* 定義リスト */
+.doc-body dl:not(.doc-meta) {
+  margin: 0 0 var(--doc-space-4);
+  padding-left: 0;
+}
+.doc-body dl:not(.doc-meta) > dt {
+  font-weight: 700;
+  margin-top: var(--doc-space-3);
+}
+.doc-body dl:not(.doc-meta) > dd {
+  margin: var(--doc-space-1) 0 0 0;
+  padding-left: var(--doc-space-4);
+  border-left: 2px solid var(--doc-c-border);
+  color: var(--doc-c-text-muted);
+}
+
+/* 引用 */
+.doc-body blockquote {
+  margin: var(--doc-space-5) 0;
+  padding: var(--doc-space-1) 0 var(--doc-space-1) var(--doc-space-5);
+  border-left: 3px solid var(--doc-c-border-strong);
+  color: var(--doc-c-text-muted);
+}
+.doc-body blockquote > :last-child { margin-bottom: 0; }
+.doc-body blockquote cite {
+  display: block;
+  margin-top: var(--doc-space-2);
+  font-size: var(--doc-size-sm);
+  font-style: normal;
+  color: var(--doc-c-text-faint);
+}
+
+/* details / summary */
+.doc-body details {
+  margin: 0 0 var(--doc-space-4);
+  border: var(--doc-rule) solid var(--doc-c-border);
+  border-radius: var(--doc-radius-md);
+  background: var(--doc-c-surface);
+  overflow: hidden;
+}
+.doc-body summary {
+  cursor: pointer;
+  padding: var(--doc-space-3) var(--doc-space-4);
+  font-weight: 600;
+  list-style-position: inside;
+}
+.doc-body summary::marker { color: var(--doc-c-text-faint); }
+.doc-body details[open] > summary {
+  border-bottom: var(--doc-rule) solid var(--doc-c-border);
+}
+.doc-body details > :not(summary) {
+  margin-inline: var(--doc-space-4);
+}
+.doc-body details > :not(summary):first-of-type { margin-top: var(--doc-space-4); }
+.doc-body details > :last-child { margin-bottom: var(--doc-space-4); }
+
+/* ==========================================================================
+   09. コード / pre
+   ========================================================================== */
+
+code, kbd, samp, pre, .doc-body .math-inline code {
+  font-family: var(--doc-font-mono);
+  font-variant-ligatures: none;
+}
+
+/* インラインコード */
+.doc-body :not(pre) > code {
+  font-size: 0.875em;
+  padding: 0.12em 0.36em;
+  background: var(--doc-c-surface-2);
+  border: 1px solid var(--doc-c-border);
+  border-radius: var(--doc-radius-sm);
+  color: var(--doc-c-text);
+  word-break: break-all;
+}
+
+/* コードブロック */
+.doc-body pre {
+  margin: 0 0 var(--doc-space-5);
+  padding: var(--doc-space-4);
+  background: var(--doc-c-surface);
+  border: var(--doc-rule) solid var(--doc-c-border);
+  border-radius: var(--doc-radius-md);
+  overflow-x: auto;
+  font-size: var(--doc-size-sm);
+  line-height: var(--doc-leading-code);
+  tab-size: 2;
+}
+
+.doc-body pre > code {
+  display: block;
+  padding: 0;
+  background: none;
+  border: 0;
+  font-size: inherit;
+  color: inherit;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* 折り返したい場合: <pre class="wrap"> */
+.doc-body pre.wrap > code { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ファイル名つきコードブロック:
+   <figure class="code-block" data-filename="main.go"><pre><code>…</code></pre></figure>
+   （doc.js がコピーボタンをこの figure に差し込む） */
+.code-block {
+  margin: 0 0 var(--doc-space-5);
+  border: var(--doc-rule) solid var(--doc-c-border);
+  border-radius: var(--doc-radius-md);
+  background: var(--doc-c-surface);
+  overflow: hidden;
+  position: relative;
+}
+.code-block[data-filename]::before {
+  content: attr(data-filename);
+  display: block;
+  padding: var(--doc-space-2) var(--doc-space-4);
+  font-family: var(--doc-font-mono);
+  font-size: var(--doc-size-xs);
+  color: var(--doc-c-text-muted);
+  background: var(--doc-c-surface-2);
+  border-bottom: var(--doc-rule) solid var(--doc-c-border);
+}
+.code-block > pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.code-block > figcaption {
+  padding: var(--doc-space-2) var(--doc-space-4);
+  font-size: var(--doc-size-sm);
+  color: var(--doc-c-text-muted);
+  border-top: var(--doc-rule) solid var(--doc-c-border);
+}
+
+/* コピーボタン（doc.js が生成） */
+.doc-copy-btn {
+  position: absolute;
+  top: var(--doc-space-2);
+  right: var(--doc-space-2);
+  z-index: 2;
+  padding: 0.2em 0.7em;
+  font: inherit;
+  font-size: var(--doc-size-xs);
+  font-family: var(--doc-font-sans);
+  line-height: 1.8;
+  color: var(--doc-c-text-muted);
+  background: var(--doc-c-bg);
+  border: 1px solid var(--doc-c-border-strong);
+  border-radius: var(--doc-radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.code-block[data-filename] .doc-copy-btn { top: calc(var(--doc-space-2) - 1px); }
+.doc-copy-wrap { position: relative; }
+.doc-copy-wrap:hover .doc-copy-btn,
+.code-block:hover .doc-copy-btn,
+.doc-copy-btn:focus-visible,
+.doc-copy-btn[data-copied="true"] { opacity: 1; }
+.doc-copy-btn:hover { color: var(--doc-c-text); border-color: var(--doc-c-text-faint); }
+.doc-copy-btn[data-copied="true"] { color: var(--doc-c-success); border-color: var(--doc-c-success-line); }
+
+/* ==========================================================================
+   10. 表
+   ========================================================================== */
+
+/* doc.js が <table> を .doc-table-scroll でくるみ、横溢れをスクロールにする */
+.doc-table-scroll {
+  margin: 0 0 var(--doc-space-5);
+  overflow-x: auto;
+  border: var(--doc-rule) solid var(--doc-c-border);
+  border-radius: var(--doc-radius-md);
+  background: var(--doc-c-bg);
+}
+
+.doc-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--doc-size-sm);
+  line-height: 1.65;
+}
+
+/* ラップされていない素の table にも最低限の体裁を与える */
+.doc-body > table,
+.doc-body :not(.doc-table-scroll) > table {
+  margin-bottom: var(--doc-space-5);
+}
+
+/* スクロールコンテナ内では列を潰さず自然幅にし、狭い画面では横スクロールさせる。
+   ただし 1 セルが際限なく伸びないよう上限を設ける。 */
+.doc-table-scroll > table {
+  width: max-content;
+  min-width: 100%;
+}
+.doc-table-scroll th,
+.doc-table-scroll td { max-width: 26rem; }
+
+.doc-body th,
+.doc-body td {
+  padding: var(--doc-space-3) var(--doc-space-4);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: var(--doc-rule) solid var(--doc-c-border);
+}
+
+.doc-body thead th {
+  position: sticky;
+  top: 0;
+  background: var(--doc-c-surface-2);
+  color: var(--doc-c-text);
+  font-weight: 700;
+  font-size: var(--doc-size-xs);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border-bottom: 2px solid var(--doc-c-border-strong);
+}
+
+.doc-body tbody tr:last-child > * { border-bottom: 0; }
+.doc-body tbody tr:hover { background: var(--doc-c-surface); }
+
+/* 行見出し */
+.doc-body tbody th[scope="row"] {
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--doc-c-text);
+}
+
+/* 数値列: <td class="num"> または <col class="num"> */
+.doc-body td.num,
+.doc-body th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.doc-body caption {
+  caption-side: bottom;
+  padding-top: var(--doc-space-3);
+  font-size: var(--doc-size-sm);
+  color: var(--doc-c-text-muted);
+  text-align: left;
+}
+
+/* ==========================================================================
+   11. コールアウト
+   <div class="callout callout-warn" data-title="注意">…</div>
+   type: info / success / warn / danger / note
+   ========================================================================== */
+
+.callout {
+  margin: 0 0 var(--doc-space-5);
+  padding: var(--doc-space-4) var(--doc-space-5);
+  border: var(--doc-rule) solid var(--doc-c-info-line);
+  border-left-width: 4px;
+  border-radius: var(--doc-radius-md);
+  background: var(--doc-c-info-bg);
+  color: var(--doc-c-text);
+}
+
+.callout > :last-child { margin-bottom: 0; }
+.callout > :first-child { margin-top: 0; }
+
+.callout[data-title]::before {
+  content: attr(data-title);
+  display: block;
+  margin-bottom: var(--doc-space-2);
+  font-weight: 700;
+  font-size: var(--doc-size-sm);
+  letter-spacing: 0.02em;
+  color: var(--doc-c-info);
+}
+
+.callout-info    { border-color: var(--doc-c-info-line);    background: var(--doc-c-info-bg); }
+.callout-info[data-title]::before    { color: var(--doc-c-info); }
+.callout-success { border-color: var(--doc-c-success-line); background: var(--doc-c-success-bg); }
+.callout-success[data-title]::before { color: var(--doc-c-success); }
+.callout-warn    { border-color: var(--doc-c-warn-line);    background: var(--doc-c-warn-bg); }
+.callout-warn[data-title]::before    { color: var(--doc-c-warn); }
+.callout-danger  { border-color: var(--doc-c-danger-line);  background: var(--doc-c-danger-bg); }
+.callout-danger[data-title]::before  { color: var(--doc-c-danger); }
+.callout-note    { border-color: var(--doc-c-note-line);    background: var(--doc-c-note-bg); }
+.callout-note[data-title]::before    { color: var(--doc-c-note); }
+
+.callout code { background: rgba(127, 127, 127, 0.14) !important; }
+
+/* ==========================================================================
+   12. 図・メディア
+   ========================================================================== */
+
+.doc-body figure {
+  margin: 0 0 var(--doc-space-5);
+}
+
+.doc-body figure > img,
+.doc-body figure > svg {
+  display: block;
+  margin-inline: auto;
+  border-radius: var(--doc-radius-md);
+}
+
+.doc-body figcaption {
+  margin-top: var(--doc-space-3);
+  font-size: var(--doc-size-sm);
+  line-height: 1.7;
+  color: var(--doc-c-text-muted);
+  text-align: center;
+}
+.code-block > figcaption { text-align: left; margin-top: 0; }
+
+/* Mermaid 図 */
+.mermaid {
+  margin: 0 0 var(--doc-space-5);
+  padding: var(--doc-space-4);
+  background: var(--doc-c-surface);
+  border: var(--doc-rule) solid var(--doc-c-border);
+  border-radius: var(--doc-radius-md);
+  text-align: center;
+  overflow-x: auto;
+}
+/* レンダリング完了までソーステキストを隠す */
+.mermaid:not([data-processed]) { color: transparent; min-height: 4rem; }
+.mermaid > svg { max-width: 100%; height: auto; }
+
+/* 数式 */
+.doc-body .katex-display,
+.doc-body mjx-container[display="true"] {
+  margin: var(--doc-space-5) 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+/* ==========================================================================
+   13. カード / グリッド
+   ========================================================================== */
+
+.doc-grid {
+  display: grid;
+  gap: var(--doc-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  margin: 0 0 var(--doc-space-5);
+}
+.doc-grid-2 { grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+
+.card {
+  padding: var(--doc-space-4) var(--doc-space-5);
+  background: var(--doc-c-surface);
+  border: var(--doc-rule) solid var(--doc-c-border);
+  border-radius: var(--doc-radius-md);
+}
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.card h3, .card h4 { margin-top: 0; }
+
+/* 数値ハイライト */
+.stat { display: block; }
+.stat .stat-value {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.stat .stat-label {
+  display: block;
+  margin-top: var(--doc-space-1);
+  font-size: var(--doc-size-xs);
+  color: var(--doc-c-text-muted);
+}
+
+/* ==========================================================================
+   14. 目次サイドバー（TOC）
+   ========================================================================== */
+
+.doc-toc {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--doc-space-6) var(--doc-space-4);
+  border-right: var(--doc-rule) solid var(--doc-c-border);
+  background: var(--doc-c-bg);
+  font-size: var(--doc-size-sm);
+  line-height: 1.6;
+}
+
+/* 目次が空のときは場所を取らない */
+.doc-toc:empty { display: none; }
+
+.doc-toc-title {
+  margin: 0 0 var(--doc-space-3);
+  font-size: var(--doc-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--doc-c-text-faint);
+  list-style: none;
+  cursor: default;
+}
+.doc-toc-title::-webkit-details-marker { display: none; }
+
+/* 広い画面では常時展開（開閉させない）、狭い画面では開閉できるようにする */
+@media (min-width: 60rem) {
+  .doc-toc-details > summary { pointer-events: none; }
+}
+@media (max-width: 59.99rem) {
+  .doc-toc-title { cursor: pointer; margin-bottom: 0; }
+  .doc-toc-details[open] > .doc-toc-title { margin-bottom: var(--doc-space-3); }
+  .doc-toc-title::after { content: '▾'; margin-left: 0.5em; }
+  .doc-toc-details:not([open]) > .doc-toc-title::after { content: '▸'; }
+}
+
+.doc-toc ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.doc-toc ul ul { padding-left: var(--doc-space-4); }
+.doc-toc li { margin: 0; }
+
+.doc-toc a {
+  display: block;
+  padding: 0.3em var(--doc-space-3);
+  color: var(--doc-c-text-muted);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--doc-radius-sm) var(--doc-radius-sm) 0;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.doc-toc a:hover {
+  color: var(--doc-c-text);
+  background: var(--doc-c-surface);
+}
+.doc-toc a[aria-current="true"] {
+  color: var(--doc-c-accent);
+  border-left-color: var(--doc-c-accent);
+  background: var(--doc-c-accent-weak);
+  font-weight: 600;
+}
+.doc-toc [data-level="3"] a { font-size: 0.94em; }
+
+/* 狭い画面では折りたたみの帯にする */
+@media (max-width: 59.99rem) {
+  .doc-toc {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: var(--doc-rule) solid var(--doc-c-border);
+    padding: var(--doc-space-4) var(--doc-space-5);
+    background: var(--doc-c-surface);
+  }
+  .doc-toc-scroller { max-height: 40vh; overflow-y: auto; }
+}
+
+/* テーマ切替ボタン（任意・doc.js が生成） */
+.doc-theme-toggle {
+  position: fixed;
+  top: var(--doc-space-3);
+  right: var(--doc-space-3);
+  z-index: 50;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  color: var(--doc-c-text-muted);
+  background: var(--doc-c-bg);
+  border: 1px solid var(--doc-c-border);
+  border-radius: 999px;
+  box-shadow: var(--doc-shadow-sm);
+  cursor: pointer;
+}
+.doc-theme-toggle:hover { color: var(--doc-c-text); }
+
+/* ==========================================================================
+   15. 脚注・フッタ
+   ========================================================================== */
+
+.doc-body .footnote-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+  text-decoration: none;
+  padding: 0 0.15em;
+}
+
+.footnotes {
+  margin-top: var(--doc-space-7);
+  padding-top: var(--doc-space-4);
+  border-top: var(--doc-rule) solid var(--doc-c-border);
+  font-size: var(--doc-size-sm);
+  color: var(--doc-c-text-muted);
+}
+.footnotes ol { padding-left: 1.4em; }
+.footnotes li { margin-bottom: var(--doc-space-2); }
+.doc-body .footnotes :is(h2, h3) {
+  font-size: var(--doc-size-h4);
+  margin: 0 0 var(--doc-space-3);
+  padding-bottom: 0;
+  border-bottom: 0;
+  color: var(--doc-c-text-muted);
+}
+
+.doc-footer {
+  margin-top: var(--doc-space-8);
+  padding-top: var(--doc-space-4);
+  border-top: var(--doc-rule) solid var(--doc-c-border);
+  font-size: var(--doc-size-sm);
+  color: var(--doc-c-text-faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--doc-space-2) var(--doc-space-5);
+  justify-content: space-between;
+}
+.doc-footer p { margin: 0; }
+
+/* ==========================================================================
+   16. ユーティリティ
+   ========================================================================== */
+
+.doc-muted { color: var(--doc-c-text-muted); }
+.doc-faint { color: var(--doc-c-text-faint); }
+.doc-small { font-size: var(--doc-size-sm); }
+.doc-center { text-align: center; }
+.doc-nowrap { white-space: nowrap; }
+.doc-tnum { font-variant-numeric: tabular-nums; }
+.doc-mt-0 { margin-top: 0 !important; }
+.doc-mb-0 { margin-bottom: 0 !important; }
+
+/* 本文幅を超えて広く見せたいブロック（大きな表・図） */
+.doc-wide {
+  width: min(100%, 68rem);
+  margin-inline: calc(50% - min(50%, 34rem));
+}
+@media (max-width: 60rem) { .doc-wide { width: 100%; margin-inline: 0; } }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.doc-skip-link {
+  position: absolute;
+  left: var(--doc-space-3);
+  top: var(--doc-space-3);
+  z-index: 100;
+  padding: var(--doc-space-2) var(--doc-space-4);
+  background: var(--doc-c-bg);
+  color: var(--doc-c-text);
+  border: 1px solid var(--doc-c-border-strong);
+  border-radius: var(--doc-radius-sm);
+  transform: translateY(-200%);
+}
+.doc-skip-link:focus { transform: none; }
+
+/* ==========================================================================
+   17. シンタックスハイライト（highlight.js を使う場合のみ有効）
+   外部テーマ CSS を読まずに済むよう、トークン色もトークン変数から作る。
+   ========================================================================== */
+
+:root {
+  --hl-comment: #6d7683;
+  --hl-keyword: #a02a86;
+  --hl-string:  #1c7a4e;
+  --hl-number:  #b05a12;
+  --hl-title:   #1f5fa9;
+  --hl-type:    #0f7490;
+  --hl-attr:    #7a4bbd;
+  --hl-meta:    #6d7683;
+  --hl-deletion-bg: var(--doc-c-danger-bg);
+  --hl-addition-bg: var(--doc-c-success-bg);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --hl-comment: #7d8792;
+    --hl-keyword: #e08bd0;
+    --hl-string:  #86d0a4;
+    --hl-number:  #e6b07a;
+    --hl-title:   #7fb3f0;
+    --hl-type:    #6fc7dc;
+    --hl-attr:    #bda6ef;
+    --hl-meta:    #7d8792;
+  }
+}
+:root[data-theme="dark"] {
+  --hl-comment: #7d8792;
+  --hl-keyword: #e08bd0;
+  --hl-string:  #86d0a4;
+  --hl-number:  #e6b07a;
+  --hl-title:   #7fb3f0;
+  --hl-type:    #6fc7dc;
+  --hl-attr:    #bda6ef;
+  --hl-meta:    #7d8792;
+}
+
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag,
+.hljs-name, .hljs-tag, .hljs-subst { color: var(--hl-keyword); }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute,
+.hljs-meta .hljs-string { color: var(--hl-string); }
+.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-link { color: var(--hl-number); }
+.hljs-title, .hljs-section, .hljs-title.function_ { color: var(--hl-title); font-weight: 600; }
+.hljs-type, .hljs-built_in, .hljs-class .hljs-title,
+.hljs-selector-id, .hljs-selector-class { color: var(--hl-type); }
+.hljs-attr, .hljs-variable, .hljs-template-variable,
+.hljs-property, .hljs-params { color: var(--hl-attr); }
+.hljs-meta { color: var(--hl-meta); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+.hljs-deletion { background: var(--hl-deletion-bg); }
+.hljs-addition { background: var(--hl-addition-bg); }
+
+/* ==========================================================================
+   18. 印刷
+   A4 / 1 段組・目次とインタラクション要素は落とす
+   ========================================================================== */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+
+  :root {
+    --doc-c-bg: #ffffff;
+    --doc-c-surface: #ffffff;
+    --doc-c-surface-2: #f2f4f7;
+    --doc-c-border: #c8ced6;
+    --doc-c-text: #000000;
+    --doc-c-text-muted: #333333;
+    --doc-c-text-faint: #555555;
+    --doc-measure: none;
+  }
+
+  html { font-size: 10.5pt; }
+  body { background: #fff; color: #000; line-height: 1.7; }
+
+  .doc-toc,
+  .doc-theme-toggle,
+  .doc-copy-btn,
+  .heading-anchor,
+  .doc-skip-link { display: none !important; }
+
+  .doc-layout { display: block; }
+  .doc-main { padding: 0; }
+  .doc-header, .doc-body, .doc-footer { max-width: none; }
+
+  .doc-body h1, .doc-body h2, .doc-body h3, .doc-body h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .doc-body p, .doc-body li, .doc-body blockquote {
+    orphans: 3;
+    widows: 3;
+  }
+  .doc-body pre,
+  .code-block,
+  .callout,
+  .doc-body figure,
+  .doc-body table,
+  .doc-table-scroll,
+  .mermaid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .doc-table-scroll { overflow: visible; }
+  .doc-body thead { display: table-header-group; }
+  .doc-body thead th { position: static; }
+  .doc-body pre { white-space: pre-wrap; word-break: break-all; }
+
+  /* 外部リンクは URL を併記（内部アンカーは除く） */
+  .doc-body a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #555;
+    word-break: break-all;
+  }
+
+  /* 印刷時に改ページさせたいブロック: <div class="page-break"></div> */
+  .page-break { break-before: page; page-break-before: always; }
+}
+</style>
+<script>
+  window.DOC_CONFIG = {
+    themeToggle: { enable: true },
+    highlight: { enable: true }
+  };
+</script>
+</head>
+<body>
+<a class="doc-skip-link" href="#main">本文へスキップ</a>
+<div class="doc-layout">
+  <aside class="doc-toc" id="doc-toc"></aside>
+  <div class="doc-main" id="main">
+    <header class="doc-header">
+      <p class="doc-eyebrow">実装計画 / DESIGN DOC</p>
+      <h1>AI Doc Template レビューフィードバック機能</h1>
+      <p class="doc-subtitle">人間の段落コメントを安全に保存し、AI が元文書と対応づけて修正できる仕組みの実装計画。</p>
+      <dl class="doc-meta">
+        <div><dt>最終更新</dt><dd>2026-09-24 23:25 JST</dd></div>
+        <div><dt>ステータス</dt><dd><span class="badge badge-success">実装済み</span></dd></div>
+        <div><dt>対象</dt><dd>data-overmind / ai-doc-template</dd></div>
+        <div><dt>主な読者</dt><dd>開発者・レビュアー</dd></div>
+      </dl>
+    </header>
+
+    <article class="doc-body">
+      <p class="lead"><code>ai-doc-template</code> の文書に段落単位のコメント UI を加え、<code>data-overmind</code> が元 HTML の隣へレビュー JSON を安全に保存します。文書の通常配布や印刷は変えず、data-overmind 経由で開いたときだけレビュー機能が現れます。</p>
+
+      <div class="callout callout-info" data-title="結論">
+        <p>2 つのリポジトリは同一オリジンの小さな HTTP API で接続します。HTML は改変せず、<code>architecture.html</code> に対して <code>architecture.html.review.json</code> を 1 個だけ作る方式を採用します。</p>
+      </div>
+
+      <h2>実現する体験</h2>
+      <ol>
+        <li>人間が data-overmind から HTML を開きます。</li>
+        <li>段落右側の薄い三点リーダーからコメント欄を開きます。</li>
+        <li>入力は自動的にブラウザへ一時保存されます。</li>
+        <li>目次メニューの「レビューをサブミットする」で送信します。</li>
+        <li>元 HTML と同じ場所にレビュー JSON が保存されます。</li>
+        <li>AI は HTML と JSON を読み、引用された段落へ修正を適用します。</li>
+      </ol>
+
+      <h2>設計の全体像</h2>
+      <div class="mermaid">
+flowchart LR
+  H[人間のレビュアー] -->|段落コメント| T[ai-doc-template HTML]
+  T -->|LocalStorage 自動保存| L[(ブラウザ内 draft)]
+  T -->|PUT review| D[data-overmind]
+  D -->|原子的に保存| R[document.html.review.json]
+  O[document.html] -. 相互参照 .- R
+  A[AI エージェント] --> O
+  A --> R
+  A -->|指摘を反映| O
+      </div>
+
+      <h3>責務の分離</h3>
+      <table>
+        <caption>コンポーネントごとの責務</caption>
+        <thead><tr><th scope="col">コンポーネント</th><th scope="col">担当すること</th><th scope="col">担当しないこと</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">ai-doc-template</th><td>レビュー UI、段落アンカー、draft 保存、API 呼び出し</td><td>ローカルファイルへの直接書き込み</td></tr>
+          <tr><th scope="row">data-overmind</th><td>元文書の検証、競合検出、レビュー JSON の安全な保存</td><td>HTML の書き換え、UI の注入</td></tr>
+          <tr><th scope="row">AI エージェント</th><td>元文書とレビューを読み、指摘の意図を反映</td><td>未確認レビューの自動削除</td></tr>
+        </tbody>
+      </table>
+
+      <h2>重要な設計判断</h2>
+      <h3>data-overmind 上でだけ自動有効化する</h3>
+      <p><code>doc.js</code> は同一オリジンの <code>/_data-overmind/review-context</code> を確認します。成功した場合だけ UI を生成し、404 や直接ファイル表示では何も追加しません。既存の静的配布、単一ファイル配布、印刷を壊しません。</p>
+
+      <h3>元 HTML は変更しない</h3>
+      <p>レビュー提出時に HTML へリンクやメタデータを書き戻すと、元文書の hash が変わり、編集中の差分とも衝突します。代わりに、決定的な sibling filename と JSON 内の <code>source.path</code> で双方向に辿れるようにします。</p>
+
+      <h3>JSON を正本にする</h3>
+      <p>Markdown よりも、再読込、入力検証、競合検出、将来の状態追加が安定するため JSON を選びます。2 space indent と明示的なフィールド名により AI もそのまま読めます。</p>
+
+      <h3>読み取り専用境界を必要最小限だけ広げる</h3>
+      <p>一般的なファイル書き込み API は作りません。保存先はサーバーが元 HTML の basename から導出し、その sibling review file だけを書き換えられるようにします。</p>
+
+      <h2>保存される情報</h2>
+      <p>各コメントには、コメント本文だけでなく、対象の段落またはリスト項目を再発見するための複数の手掛かりを保存します。</p>
+      <ul>
+        <li>直前の見出し ID。</li>
+        <li>文書全体とセクション内の段落位置。</li>
+        <li>空白を正規化し API 上限内に収めた段落引用。</li>
+        <li>保存時にサーバーが引用から計算する SHA-256。</li>
+        <li>任意の明示 <code>data-review-id</code>。</li>
+      </ul>
+      <pre><code class="language-json">{
+  "source": {
+    "path": "docs/architecture.html",
+    "sha256": "sha256:..."
+  },
+  "comments": [{
+    "block": {
+      "id": "背景::p-0",
+      "sectionId": "背景",
+      "paragraphIndex": 3,
+      "quote": "現状の処理は…",
+      "textSHA256": "sha256:..."
+    },
+    "comment": "判断根拠となる計測値を追記してください。"
+  }]
+}</code></pre>
+
+      <h2>API</h2>
+      <h3>コンテキスト取得</h3>
+      <p><code>GET /_data-overmind/review-context?document=/docs/architecture.html</code> は、元 HTML の hash、保存先 review path、既存レビューと revision を返します。HTML でないファイルやルート外の path は拒否します。</p>
+
+      <h3>レビュー保存</h3>
+      <p><code>PUT /_data-overmind/reviews?document=/docs/architecture.html</code> が現在の全コメントを保存します。決定的なリソースの置換なので、再実行可能な <code>PUT</code> を使います。</p>
+
+      <h3>競合</h3>
+      <p>元 HTML の hash または既存 review revision が画面を開いた時点から変わっていた場合は <code>409 Conflict</code> とし、ファイルを変更しません。画面側は draft を残したまま再読み込みを促します。</p>
+
+      <div class="callout callout-warn" data-title="書き込みの安全性">
+        <p>JSON と専用 header を必須にし、cross-origin request を拒否します。body は 1 MiB、コメントは 500 件、1 コメントは 16 KiB に制限します。一時ファイルを同じディレクトリへ書き、同期後に rename して原子的に置換します。</p>
+      </div>
+
+      <h2>レビュー UI</h2>
+      <h3>段落の操作</h3>
+      <p>未コメントの三点ボタンは薄く、段落への hover または focus で明瞭になります。コメントがある段落では常時見える状態にします。パネルは同時に 1 個だけ開き、Escape で閉じて元のボタンへフォーカスを戻します。</p>
+
+      <h3>目次メニュー</h3>
+      <p>目次の下にコメント件数、自動保存状態、submit ボタン、送信結果を表示します。短い文書で目次が作られなくても、このレビュー領域だけは表示できるようにします。</p>
+
+      <h3>draft の保護</h3>
+      <p>入力は約 300 ms の間隔で <code>localStorage</code> に保存します。blur、タブが非表示になる時、ページ離脱時にも保存します。キーへ元 HTML の hash を含め、文書更新後に古い draft を誤適用しません。</p>
+
+      <h2>変更する場所</h2>
+      <table>
+        <caption>主な変更ファイル</caption>
+        <thead><tr><th scope="col">リポジトリ</th><th scope="col">ファイル</th><th scope="col">変更</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">ai-doc-template</th><td><code>assets/doc.js</code></td><td>検出、アンカー、UI、draft、submit</td></tr>
+          <tr><th scope="row">ai-doc-template</th><td><code>assets/doc.css</code></td><td>段落ガター、パネル、目次操作、responsive / print</td></tr>
+          <tr><th scope="row">ai-doc-template</th><td><code>template.html</code> と文書</td><td><code>DOC_CONFIG.review</code> と利用規約</td></tr>
+          <tr><th scope="row">data-overmind</th><td><code>internal/fileserver/review.go</code></td><td>API、validation、hash、atomic write</td></tr>
+          <tr><th scope="row">data-overmind</th><td><code>internal/fileserver/server.go</code></td><td>予約 prefix の routing</td></tr>
+          <tr><th scope="row">data-overmind</th><td><code>internal/fileserver/review_test.go</code></td><td>正常系、安全性、競合、回帰テスト</td></tr>
+        </tbody>
+      </table>
+
+      <h2>実装結果</h2>
+      <ol>
+        <li>JSON schema、context / save API、入力検証を実装しました。</li>
+        <li>source / review の競合検出と atomic write を実装しました。</li>
+        <li>機能検出、段落アンカー、コメント UI、localStorage を追加しました。</li>
+        <li>dark、mobile、keyboard、print を調整しました。</li>
+        <li>Go テスト、standalone build、実ブラウザでの一連の操作を確認しました。</li>
+      </ol>
+
+      <h2>受け入れ条件</h2>
+      <ul class="checklist">
+        <li><input type="checkbox" checked disabled> 全段落からコメント入力を開始できる。</li>
+        <li><input type="checkbox" checked disabled> reload や submit 失敗で draft が失われない。</li>
+        <li><input type="checkbox" checked disabled> sibling review JSON が原子的に保存される。</li>
+        <li><input type="checkbox" checked disabled> source / review の競合で上書きしない。</li>
+        <li><input type="checkbox" checked disabled> API がない環境で既存表示が回帰しない。</li>
+        <li><input type="checkbox" checked disabled> keyboard、mobile、dark、print で利用できる。</li>
+        <li><input type="checkbox" checked disabled> AI が quote と comment から修正対象と要求を理解できる。</li>
+      </ul>
+
+      <h2>対象外と将来拡張</h2>
+      <p>初版では単一レビュアー、HTML ごとに 1 review file、対象は <code>p</code> と <code>li</code> です。返信、履歴、承認、表や図へのコメント、AI タスクの自動起動は将来拡張とします。</p>
+      <p>将来はコメント状態、複数レビュー、レビュー一覧、表・図・コードへのアンカーを schema version または後方互換フィールドで追加できます。初版の companion naming と source identity は維持します。</p>
+    </article>
+
+    <footer class="doc-footer">
+      <p>AI Doc Template レビューフィードバック機能 — 実装計画</p>
+      <p>最終更新: 2026-09-24 23:25 JST</p>
+    </footer>
+  </div>
+</div>
+<script>
+/* inlined from ../../../ai-doc-template/assets/doc.js */
+/*!
+ * AI Doc Template — doc.js
+ * 依存なし。<script src="assets/doc.js" defer><\/script> でも、
+ * <script>…中身をそのまま貼り付け…<\/script> でも動く。
+ *
+ * 提供する機能:
+ *   - 見出しへの id 付与と目次の自動生成 + スクロール追従
+ *   - 見出しアンカー（#リンク）
+ *   - コードブロックのコピーボタン
+ *   - 幅の広い表を横スクロール可能にラップ
+ *   - Mermaid 図の描画（必要なときだけ CDN から遅延ロード）
+ *   - TeX 数式の描画（KaTeX / MathJax、必要なときだけ遅延ロード）
+ *   - highlight.js によるシンタックスハイライト（任意・既定は無効）
+ *   - ライト/ダーク切替ボタン（任意・既定は無効）
+ *
+ * 設定は読み込み前に window.DOC_CONFIG を定義して上書きする。
+ *   <script>window.DOC_CONFIG = { toc: { enable: false } };<\/script>
+ *   <script src="assets/doc.js" defer><\/script>
+ */
+(function () {
+  'use strict';
+
+  /* ----------------------------------------------------------------------
+     既定設定
+     enable: true | false | 'auto'（'auto' = 対象要素があるときだけ有効）
+     ---------------------------------------------------------------------- */
+  var DEFAULTS = {
+    content: '.doc-body',
+
+    toc: {
+      enable: true,
+      target: '#doc-toc',
+      headings: 'h2, h3',
+      title: '目次',
+      minHeadings: 2,
+      scrollSpy: true
+    },
+
+    anchors: { enable: true, headings: 'h2, h3, h4', symbol: '#' },
+
+    copyCode: {
+      enable: true,
+      label: 'コピー',
+      copiedLabel: 'コピーしました',
+      failedLabel: '失敗しました'
+    },
+
+    tableScroll: { enable: true },
+
+    mermaid: {
+      enable: 'auto',
+      selector: '.mermaid',
+      src: 'https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.min.js',
+      config: {}
+    },
+
+    math: {
+      enable: 'auto',
+      engine: 'katex', // 'katex' | 'mathjax'
+      katex: {
+        js: 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js',
+        autoRender: 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js',
+        css: 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css',
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '\\[', right: '\\]', display: true },
+          { left: '\\(', right: '\\)', display: false },
+          { left: '$', right: '$', display: false }
+        ],
+        ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option']
+      },
+      mathjax: {
+        js: 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js'
+      }
+    },
+
+    highlight: {
+      enable: false,
+      src: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/highlight.min.js'
+    },
+
+    themeToggle: {
+      enable: false,
+      storageKey: 'doc-theme',
+      lightLabel: 'ライトテーマに切り替え',
+      darkLabel: 'ダークテーマに切り替え'
+    }
+  };
+
+  /* ----------------------------------------------------------------------
+     ユーティリティ
+     ---------------------------------------------------------------------- */
+
+  function isPlainObject(v) {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+  }
+
+  function merge(base, override) {
+    var out = {};
+    Object.keys(base).forEach(function (k) { out[k] = base[k]; });
+    if (!isPlainObject(override)) return out;
+    Object.keys(override).forEach(function (k) {
+      out[k] = isPlainObject(base[k]) && isPlainObject(override[k])
+        ? merge(base[k], override[k])
+        : override[k];
+    });
+    return out;
+  }
+
+  var CFG = merge(DEFAULTS, window.DOC_CONFIG || {});
+
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $$(sel, root) {
+    return Array.prototype.slice.call((root || document).querySelectorAll(sel));
+  }
+
+  function enabled(flag, hasTargets) {
+    if (flag === 'auto') return !!hasTargets;
+    return !!flag;
+  }
+
+  // 同一オリジンや file:// のローカル配置では crossorigin を付けない
+  // （付けると file:// で CORS エラーになり読めなくなる）
+  function isCrossOrigin(url) {
+    if (!/^https?:\/\//i.test(url)) return false;
+    try { return new URL(url, location.href).origin !== location.origin; }
+    catch (e) { return true; }
+  }
+
+  var scriptCache = {};
+  function loadScript(src) {
+    if (scriptCache[src]) return scriptCache[src];
+    scriptCache[src] = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      if (isCrossOrigin(src)) s.crossOrigin = 'anonymous';
+      s.onload = function () { resolve(); };
+      s.onerror = function () { reject(new Error('failed to load ' + src)); };
+      document.head.appendChild(s);
+    });
+    return scriptCache[src];
+  }
+
+  function loadStyle(href) {
+    if (document.querySelector('link[href="' + href + '"]')) return;
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = href;
+    if (isCrossOrigin(href)) l.crossOrigin = 'anonymous';
+    document.head.appendChild(l);
+  }
+
+  function warn(msg, err) {
+    if (window.console && console.warn) console.warn('[doc.js] ' + msg, err || '');
+  }
+
+  function prefersDark() {
+    var attr = document.documentElement.getAttribute('data-theme');
+    if (attr === 'dark') return true;
+    if (attr === 'light') return false;
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+
+  /* ----------------------------------------------------------------------
+     見出し id（日本語をそのまま残す安全なスラッグ）
+     ---------------------------------------------------------------------- */
+
+  function slugify(text) {
+    return String(text)
+      .trim()
+      .toLowerCase()
+      .replace(/[\s　]+/g, '-')
+      .replace(/[!"#$%&'()*+,./:;<=>?@[\]^`{|}~。、，．・「」『』（）〔〕【】〈〉《》！？：；]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  function ensureHeadingIds(headings) {
+    var used = {};
+    $$('[id]').forEach(function (el) { used[el.id] = true; });
+
+    headings.forEach(function (h, i) {
+      if (h.id) { used[h.id] = true; return; }
+      var base = slugify(h.textContent) || ('section-' + (i + 1));
+      var id = base;
+      var n = 2;
+      while (used[id]) { id = base + '-' + n; n += 1; }
+      used[id] = true;
+      h.id = id;
+    });
+  }
+
+  /* ----------------------------------------------------------------------
+     目次 + スクロール追従
+     ---------------------------------------------------------------------- */
+
+  function buildToc(content) {
+    var host = $(CFG.toc.target);
+    if (!host) return null;
+
+    var headings = $$(CFG.toc.headings, content).filter(function (h) {
+      return h.dataset.tocSkip === undefined;
+    });
+
+    if (headings.length < CFG.toc.minHeadings) {
+      host.remove();
+      return null;
+    }
+
+    ensureHeadingIds(headings);
+
+    var scroller = document.createElement('div');
+    scroller.className = 'doc-toc-scroller';
+
+    var rootList = document.createElement('ul');
+    var currentSub = null;
+
+    headings.forEach(function (h) {
+      var level = Number(h.tagName.charAt(1));
+      var li = document.createElement('li');
+      li.dataset.level = String(level);
+
+      var a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent.replace(/^#\s*/, '').trim();
+      li.appendChild(a);
+
+      if (level <= 2 || !rootList.lastElementChild) {
+        rootList.appendChild(li);
+        currentSub = null;
+      } else {
+        if (!currentSub) {
+          currentSub = document.createElement('ul');
+          rootList.lastElementChild.appendChild(currentSub);
+        }
+        currentSub.appendChild(li);
+      }
+    });
+
+    scroller.appendChild(rootList);
+
+    var nav = document.createElement('nav');
+    nav.setAttribute('aria-label', CFG.toc.title || '目次');
+
+    // 広い画面では常に開いたサイドバー、狭い画面では畳めるアコーディオンにする
+    var details = document.createElement('details');
+    details.className = 'doc-toc-details';
+
+    var summary = document.createElement('summary');
+    summary.className = 'doc-toc-title';
+    summary.textContent = CFG.toc.title || '目次';
+
+    details.appendChild(summary);
+    details.appendChild(scroller);
+    nav.appendChild(details);
+    host.appendChild(nav);
+
+    var wide = window.matchMedia('(min-width: 60rem)');
+    var syncOpen = function () { details.open = wide.matches; };
+    syncOpen();
+    if (wide.addEventListener) wide.addEventListener('change', syncOpen);
+    else if (wide.addListener) wide.addListener(syncOpen);
+
+    return { host: host, headings: headings, links: $$('a', rootList) };
+  }
+
+  function setupScrollSpy(toc) {
+    if (!toc || !CFG.toc.scrollSpy) return;
+
+    var linkById = {};
+    toc.links.forEach(function (a) {
+      linkById[decodeURIComponent(a.getAttribute('href').slice(1))] = a;
+    });
+
+    var active = null;
+    var ticking = false;
+
+    function update() {
+      ticking = false;
+      var offset = 100;
+      var current = toc.headings[0];
+
+      for (var i = 0; i < toc.headings.length; i += 1) {
+        if (toc.headings[i].getBoundingClientRect().top <= offset) {
+          current = toc.headings[i];
+        } else {
+          break;
+        }
+      }
+
+      // 最下部まで来たら最後の見出しを選択状態にする
+      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+        current = toc.headings[toc.headings.length - 1];
+      }
+
+      var link = current && linkById[current.id];
+      if (link === active) return;
+      if (active) active.removeAttribute('aria-current');
+      if (link) {
+        link.setAttribute('aria-current', 'true');
+        // サイドバー内で見えるようにスクロール
+        var box = toc.host.getBoundingClientRect();
+        var lb = link.getBoundingClientRect();
+        if (lb.top < box.top || lb.bottom > box.bottom) {
+          link.scrollIntoView({ block: 'nearest' });
+        }
+      }
+      active = link || null;
+    }
+
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(update);
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    update();
+  }
+
+  /* ----------------------------------------------------------------------
+     見出しアンカー
+     ---------------------------------------------------------------------- */
+
+  function addHeadingAnchors(content) {
+    var headings = $$(CFG.anchors.headings, content);
+    ensureHeadingIds(headings);
+    headings.forEach(function (h) {
+      if ($('.heading-anchor', h)) return;
+      var a = document.createElement('a');
+      a.className = 'heading-anchor';
+      a.href = '#' + h.id;
+      a.textContent = CFG.anchors.symbol;
+      a.setAttribute('aria-label', h.textContent.trim() + ' へのリンク');
+      h.insertBefore(a, h.firstChild);
+    });
+  }
+
+  /* ----------------------------------------------------------------------
+     コードのコピーボタン
+     ---------------------------------------------------------------------- */
+
+  function addCopyButtons(content) {
+    $$('pre > code', content).forEach(function (code) {
+      var pre = code.parentElement;
+      var host = pre.closest('.code-block');
+
+      if (!host) {
+        // .code-block でくるまれていない場合は相対配置のラッパを足す
+        host = document.createElement('div');
+        host.className = 'doc-copy-wrap';
+        pre.parentNode.insertBefore(host, pre);
+        host.appendChild(pre);
+      }
+      if ($('.doc-copy-btn', host)) return;
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'doc-copy-btn';
+      btn.textContent = CFG.copyCode.label;
+      btn.setAttribute('aria-label', 'コードをコピー');
+
+      btn.addEventListener('click', function () {
+        var text = code.innerText;
+        var done = function (ok) {
+          btn.textContent = ok ? CFG.copyCode.copiedLabel : CFG.copyCode.failedLabel;
+          btn.dataset.copied = ok ? 'true' : 'false';
+          window.setTimeout(function () {
+            btn.textContent = CFG.copyCode.label;
+            delete btn.dataset.copied;
+          }, 1600);
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { done(true); },
+            function () { done(fallbackCopy(text)); });
+        } else {
+          done(fallbackCopy(text));
+        }
+      });
+
+      host.appendChild(btn);
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /* ----------------------------------------------------------------------
+     表の横スクロール化
+     ---------------------------------------------------------------------- */
+
+  function wrapTables(content) {
+    $$('table', content).forEach(function (table) {
+      if (table.closest('.doc-table-scroll')) return;
+      var wrap = document.createElement('div');
+      wrap.className = 'doc-table-scroll';
+      wrap.setAttribute('tabindex', '0');
+      wrap.setAttribute('role', 'region');
+      var cap = $('caption', table);
+      wrap.setAttribute('aria-label', cap ? cap.textContent.trim() : '表');
+      table.parentNode.insertBefore(wrap, table);
+      wrap.appendChild(table);
+    });
+  }
+
+  /* ----------------------------------------------------------------------
+     Mermaid
+     ---------------------------------------------------------------------- */
+
+  function initMermaid(nodes) {
+    return loadScript(CFG.mermaid.src).then(function () {
+      if (!window.mermaid) throw new Error('mermaid not available');
+      var cfg = merge({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: prefersDark() ? 'dark' : 'default',
+        fontFamily: getComputedStyle(document.body).fontFamily
+      }, CFG.mermaid.config);
+      window.mermaid.initialize(cfg);
+      return window.mermaid.run({ nodes: nodes });
+    }).catch(function (e) {
+      warn('Mermaid の描画に失敗しました。ソースをそのまま表示します。', e);
+      nodes.forEach(function (n) { n.setAttribute('data-processed', 'failed'); });
+    });
+  }
+
+  /* ----------------------------------------------------------------------
+     数式（KaTeX / MathJax）
+     ---------------------------------------------------------------------- */
+
+  var MATH_PATTERN = /(\$\$[\s\S]+?\$\$)|(\\\([\s\S]+?\\\))|(\\\[[\s\S]+?\\\])|(\$[^$\n]+\$)/;
+
+  function hasMath(content) {
+    if ($('.math, [data-math]', content)) return true;
+    // code / pre の中の $1, $HOME などを数式と誤検出しないよう除外して判定する
+    var clone = content.cloneNode(true);
+    $$('pre, code, kbd, samp, script, style', clone).forEach(function (el) { el.remove(); });
+    return MATH_PATTERN.test(clone.textContent || '');
+  }
+
+  function renderMathKatex(content) {
+    var k = CFG.math.katex;
+    loadStyle(k.css);
+    return loadScript(k.js)
+      .then(function () { return loadScript(k.autoRender); })
+      .then(function () {
+        if (!window.renderMathInElement) throw new Error('KaTeX auto-render not available');
+        window.renderMathInElement(content, {
+          delimiters: k.delimiters,
+          ignoredTags: k.ignoredTags,
+          throwOnError: false
+        });
+      })
+      .catch(function (e) { warn('KaTeX の読み込みに失敗しました。', e); });
+  }
+
+  function renderMathMathjax() {
+    window.MathJax = merge({
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+    }, window.MathJax || {});
+    return loadScript(CFG.math.mathjax.js)
+      .catch(function (e) { warn('MathJax の読み込みに失敗しました。', e); });
+  }
+
+  /* ----------------------------------------------------------------------
+     シンタックスハイライト（任意）
+     ---------------------------------------------------------------------- */
+
+  function initHighlight(content) {
+    return loadScript(CFG.highlight.src).then(function () {
+      if (!window.hljs) throw new Error('highlight.js not available');
+      $$('pre > code', content).forEach(function (block) {
+        if (block.dataset.noHighlight !== undefined) return;
+        window.hljs.highlightElement(block);
+      });
+    }).catch(function (e) { warn('highlight.js の読み込みに失敗しました。', e); });
+  }
+
+  /* ----------------------------------------------------------------------
+     テーマ切替（任意）
+     ---------------------------------------------------------------------- */
+
+  function initThemeToggle() {
+    var key = CFG.themeToggle.storageKey;
+    var stored = null;
+    try { stored = window.localStorage.getItem(key); } catch (e) { /* noop */ }
+    if (stored === 'dark' || stored === 'light') {
+      document.documentElement.setAttribute('data-theme', stored);
+    }
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'doc-theme-toggle';
+    btn.textContent = '◐';
+
+    function sync() {
+      var dark = prefersDark();
+      btn.setAttribute('aria-label', dark ? CFG.themeToggle.lightLabel : CFG.themeToggle.darkLabel);
+      btn.title = btn.getAttribute('aria-label');
+    }
+
+    btn.addEventListener('click', function () {
+      var next = prefersDark() ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { window.localStorage.setItem(key, next); } catch (e) { /* noop */ }
+      sync();
+    });
+
+    sync();
+    document.body.appendChild(btn);
+  }
+
+  /* ----------------------------------------------------------------------
+     起動
+     ---------------------------------------------------------------------- */
+
+  function init() {
+    var content = $(CFG.content) || document.body;
+
+    if (CFG.anchors.enable) {
+      try { addHeadingAnchors(content); } catch (e) { warn('見出しアンカー', e); }
+    }
+    if (CFG.toc.enable) {
+      try { setupScrollSpy(buildToc(content)); } catch (e) { warn('目次', e); }
+    }
+    if (CFG.tableScroll.enable) {
+      try { wrapTables(content); } catch (e) { warn('表のラップ', e); }
+    }
+    if (CFG.copyCode.enable) {
+      try { addCopyButtons(content); } catch (e) { warn('コピーボタン', e); }
+    }
+    if (CFG.themeToggle.enable) {
+      try { initThemeToggle(); } catch (e) { warn('テーマ切替', e); }
+    }
+
+    var mermaidNodes = $$(CFG.mermaid.selector, content);
+    if (enabled(CFG.mermaid.enable, mermaidNodes.length)) {
+      initMermaid(mermaidNodes);
+    }
+
+    if (enabled(CFG.math.enable, hasMath(content))) {
+      if (CFG.math.engine === 'mathjax') renderMathMathjax();
+      else renderMathKatex(content);
+    }
+
+    if (CFG.highlight.enable) {
+      initHighlight(content);
+    }
+
+    document.documentElement.setAttribute('data-doc-ready', 'true');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  // 動的にコンテンツを差し替えたときに再実行できるよう公開しておく
+  window.DocTemplate = { init: init, config: CFG };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "path": "workspace/review-test.html",
+    "sha256": "sha256:c9c84a0768477145ed1f911c4f92bc5e056f7e460f62fb5b17fd3c590b3594fc",
+    "title": "週次リリース報告の自動化 — レビュー用サンプル"
+  },
+  "review": {
+    "path": "workspace/review-test.html.review.json",
+    "submittedAt": "2026-09-24T14:45:57.643422Z"
+  },
+  "comments": [
+    {
+      "id": "4b4ff0eb-37bc-46cb-9001-482518215b36",
+      "block": {
+        "id": "proposal-summary",
+        "sectionId": "preamble",
+        "paragraphIndex": 0,
+        "sectionParagraphIndex": 0,
+        "quote": "現在は各チームがチャットへ投稿した変更内容を担当者が手作業で転記している。本提案では、変更情報を定型フォーマットで収集し、毎週金曜日にリリース報告の下書きを自動生成する。",
+        "textSHA256": "sha256:562d55eb5d237920881c4d6b76fc48d574dfb7181fe506e6fecc1e3baa1ddabf"
+      },
+      "comment": "なるほど",
+      "createdAt": "2026-09-24T14:43:34.240Z",
+      "updatedAt": "2026-09-24T14:43:34.962Z"
+    },
+    {
+      "id": "fbf3872e-85d7-4e16-8f6b-aa0d029e3282",
+      "block": {
+        "id": "review-focus",
+        "sectionId": "preamble",
+        "paragraphIndex": 1,
+        "sectionParagraphIndex": 1,
+        "quote": "対象範囲、運用負荷、失敗時の扱い、記載内容の正確性について、段落右側の三点リーダーからコメントを付ける。",
+        "textSHA256": "sha256:61b63d6942770876c4288fdc809f9e231b1fe780a5f75226d5f59e912ce50ccd"
+      },
+      "comment": "テーブルやリストなど、\u003cp\u003eではない要素に対してコメントが書けないようですね。テーブルは適切な範囲が難しそうですが、リストについては\u003cli\u003eで出してしまってよいと思います",
+      "createdAt": "2026-09-24T14:44:22.211Z",
+      "updatedAt": "2026-09-24T14:45:27.169Z"
+    }
+  ]
+}

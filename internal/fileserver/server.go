@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const (
@@ -25,6 +26,7 @@ type fileServer struct {
 	root        string
 	realRoot    string
 	displayRoot string
+	reviewMu    sync.Mutex
 }
 
 type pageData struct {
@@ -69,7 +71,8 @@ type previewView struct {
 	OpenNewTab bool
 }
 
-// New creates a read-only HTTP file browser rooted at root.
+// New creates an HTTP file browser rooted at root. Normal browsing is
+// read-only; the review API may write validated sibling review files.
 func New(root string) (http.Handler, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -96,6 +99,11 @@ func New(root string) (http.Handler, error) {
 }
 
 func (s *fileServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, reviewAPIPrefix) {
+		s.serveReviewAPI(w, r)
+		return
+	}
+
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
