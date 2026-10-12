@@ -16,8 +16,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("review-context", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	format := flags.String("format", "markdown", "output format: markdown or json")
+	reviewPath := flags.String("review", "", "review JSON path (defaults to document.html.review.json)")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "usage: review-context [--format markdown|json] document.html")
+		fmt.Fprintln(stderr, "usage: review-context [--format markdown|json] [--review review.json] document.html")
 	}
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -27,7 +28,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	result, err := reviewcontext.Analyze(flags.Arg(0))
+	var result reviewcontext.Result
+	var err error
+	if *reviewPath == "" {
+		result, err = reviewcontext.Analyze(flags.Arg(0))
+	} else {
+		result, err = reviewcontext.AnalyzeWithReview(flags.Arg(0), *reviewPath)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "review-context: %v\n", err)
 		return 1

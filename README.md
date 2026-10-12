@@ -22,6 +22,24 @@ report.html.review.json
 
 Run the server from the directory that contains the document, open the HTML through the displayed `http://127.0.0.1:8080/` URL, add comments, and submit. An AI can then read the HTML and its `.review.json` companion together. The review file contains the quoted paragraph, stable block identifiers, timestamps, and source hashes; it never modifies the HTML itself.
 
+### Review version history
+
+Every successful submission keeps an immutable copy of the review and a snapshot of the HTML bytes it reviewed. The sibling `.review.json` remains the latest review for existing tools. History lives beside the document:
+
+```text
+report.html
+report.html.review.json
+report.html.review-history/
+  <source SHA-256 without prefix>/
+    source.html
+    reviews/
+      <review SHA-256 without prefix>.json
+```
+
+The source hash identifies a document version; the review hash identifies an individual submission. Submitting another review of the same HTML adds a review file without changing earlier entries. Editing `report.html` and submitting again creates a new source directory. Keep the `.review-history` directory with the HTML when moving or backing up the document. The fileserver exposes it through its normal file browser.
+
+Older `.review.json` files created before this history rule are preserved on the next submission. If the HTML had already changed, the old comments are archived under their recorded source hash, but the former HTML bytes cannot be reconstructed and that version has no `source.html` snapshot.
+
 Review writes are limited to HTML files below the startup directory. Requests are same-origin, size-limited, schema-validated, and use source/review revisions to reject stale overwrites. Binding with `--addr 0.0.0.0:9000` also exposes the review write endpoint to reachable devices, so use the default loopback address unless LAN access is intentional.
 
 The URL prefix `/_data-overmind/` is reserved for this API and takes precedence over files with the same path.
@@ -33,6 +51,7 @@ Use `review-context` instead of passing the complete HTML and persistence JSON t
 ```sh
 just run review-context workspace/report.html
 just run review-context --format json workspace/report.html
+just run review-context --review workspace/report.html.review-history/SOURCE_HASH/reviews/REVIEW_HASH.json workspace/report.html
 ```
 
 The command finds `workspace/report.html.review.json` automatically and does not modify either file. Its default Markdown output contains each human comment, the current target text, the nearest reviewable blocks before and after it, and its heading hierarchy. Persistence-only fields such as timestamps, comment UUIDs, and full hashes are omitted.

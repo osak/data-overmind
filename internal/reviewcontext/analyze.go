@@ -119,14 +119,22 @@ type currentBlock struct {
 // Analyze reads documentPath and its sibling .review.json file, resolves all
 // comments against the current HTML, and returns the compact context.
 func Analyze(documentPath string) (Result, error) {
+	return AnalyzeWithReview(documentPath, documentPath+".review.json")
+}
+
+// AnalyzeWithReview resolves a selected review, including an archived one,
+// against the HTML at documentPath.
+func AnalyzeWithReview(documentPath, reviewPath string) (Result, error) {
 	if strings.TrimSpace(documentPath) == "" {
 		return Result{}, errors.New("document path is required")
+	}
+	if strings.TrimSpace(reviewPath) == "" {
+		return Result{}, errors.New("review path is required")
 	}
 	htmlBytes, err := os.ReadFile(documentPath)
 	if err != nil {
 		return Result{}, fmt.Errorf("read HTML: %w", err)
 	}
-	reviewPath := documentPath + ".review.json"
 	reviewBytes, err := os.ReadFile(reviewPath)
 	if err != nil {
 		return Result{}, fmt.Errorf("read review %q: %w", reviewPath, err)
