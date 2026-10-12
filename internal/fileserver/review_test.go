@@ -123,6 +123,106 @@ func TestReviewContextAndSave(t *testing.T) {
 	}
 }
 
+func TestReviewHistoryPreservesSourceAndEverySubmission(t *testing.T) {
+	root := t.TempDir()
+	sourceName := filepath.Join(root, "report.html")
+	firstSource := "<!doctype html><p>First version</p>"
+	mustWrite(t, sourceName, firstSource)
+	handler, err := New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := reviewSavePath + "?document=%2Freport.html"
+	first := validReviewSubmit(hashBytes([]byte(firstSource)), "First version")
+	created := putReview(t, handler, target, first)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("first save: %d %s", created.Code, created.Body.String())
+	}
+	var firstContext reviewContextResponse
+	mustDecodeJSON(t, created, &firstContext)
+	first.BaseRevision = firstContext.Review.Revision
+	first.Comments[0].Comment = "Revised comment"
+	first.Comments[0].UpdatedAt = time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)
+	updated := putReview(t, handler, target, first)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("second save: %d %s", updated.Code, updated.Body.String())
+	}
+	var secondContext reviewContextResponse
+	mustDecodeJSON(t, updated, &secondContext)
+
+	firstDir := filepath.Join(sourceName+".review-history", strings.TrimPrefix(first.SourceSHA256, "sha256:"))
+	historyURL := "/report.html.review-history/" + strings.TrimPrefix(first.SourceSHA256, "sha256:") + "/source.html"
+	readOnly := requestWithHeaders(t, handler, http.MethodGet, reviewContextPath+"?document="+url.QueryEscape(historyURL), nil, nil)
+	if readOnly.Code != http.StatusNotFound || reviewErrorCode(t, readOnly) != "source_not_found" {
+		t.Fatalf("history review API status = %d, body = %s", readOnly.Code, readOnly.Body.String())
+	}
+	if got, err := os.ReadFile(filepath.Join(firstDir, "source.html")); err != nil || string(got) != firstSource {
+		t.Fatalf("first source snapshot = %q, %v", got, err)
+	}
+	for _, revision := range []*string{firstContext.Review.Revision, secondContext.Review.Revision} {
+		if revision == nil {
+			t.Fatal("missing review revision")
+		}
+		name := filepath.Join(firstDir, "reviews", strings.TrimPrefix(*revision, "sha256:")+".json")
+		if _, err := os.Stat(name); err != nil {
+			t.Fatalf("missing history %s: %v", name, err)
+		}
+	}
+
+	secondSource := "<!doctype html><p>Second version</p>"
+	mustWrite(t, sourceName, secondSource)
+	next := validReviewSubmit(hashBytes([]byte(secondSource)), "Second version")
+	next.BaseRevision = secondContext.Review.Revision
+	result := putReview(t, handler, target, next)
+	if result.Code != http.StatusOK {
+		t.Fatalf("revised source save: %d %s", result.Code, result.Body.String())
+	}
+	secondDir := filepath.Join(sourceName+".review-history", strings.TrimPrefix(next.SourceSHA256, "sha256:"))
+	if got, err := os.ReadFile(filepath.Join(secondDir, "source.html")); err != nil || string(got) != secondSource {
+		t.Fatalf("second source snapshot = %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(firstDir, "source.html")); err != nil || string(got) != firstSource {
+		t.Fatalf("old source snapshot changed = %q, %v", got, err)
+	}
+}
+
+func TestReviewHistoryPreservesLegacyReviewAfterSourceChanged(t *testing.T) {
+	root := t.TempDir()
+	sourceName := filepath.Join(root, "report.html")
+	firstSource := "<!doctype html><p>Before</p>"
+	mustWrite(t, sourceName, firstSource)
+	handler, err := New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := reviewSavePath + "?document=%2Freport.html"
+	first := validReviewSubmit(hashBytes([]byte(firstSource)), "Before")
+	created := putReview(t, handler, target, first)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("initial save: %d %s", created.Code, created.Body.String())
+	}
+	var context reviewContextResponse
+	mustDecodeJSON(t, created, &context)
+	if err := os.RemoveAll(sourceName + ".review-history"); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, sourceName, "<!doctype html><p>After</p>")
+	next := validReviewSubmit(hashBytes([]byte("<!doctype html><p>After</p>")), "After")
+	next.BaseRevision = context.Review.Revision
+	result := putReview(t, handler, target, next)
+	if result.Code != http.StatusOK {
+		t.Fatalf("new source save: %d %s", result.Code, result.Body.String())
+	}
+	legacyDir := filepath.Join(sourceName+".review-history", strings.TrimPrefix(first.SourceSHA256, "sha256:"))
+	if _, err := os.Stat(filepath.Join(legacyDir, "source.html")); !os.IsNotExist(err) {
+		t.Fatalf("legacy source unexpectedly reconstructed: %v", err)
+	}
+	archivedReview := filepath.Join(legacyDir, "reviews", strings.TrimPrefix(*context.Review.Revision, "sha256:")+".json")
+	if _, err := os.Stat(archivedReview); err != nil {
+		t.Fatalf("legacy comments lost: %v", err)
+	}
+}
+
 func TestReviewSaveDetectsSourceAndReviewConflicts(t *testing.T) {
 	root := t.TempDir()
 	sourceName := filepath.Join(root, "report.html")

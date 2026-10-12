@@ -1,6 +1,7 @@
 package fileserver
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -175,11 +176,12 @@ func (s *fileServer) serveReviewSave(w http.ResponseWriter, r *http.Request) {
 	s.reviewMu.Lock()
 	defer s.reviewMu.Unlock()
 
-	currentSourceHash, err := hashFile(target.SourceFull)
+	sourceContents, err := os.ReadFile(target.SourceFull)
 	if err != nil {
-		writeReviewError(w, internalReviewError("hash source", err))
+		writeReviewError(w, internalReviewError("read source", err))
 		return
 	}
+	currentSourceHash := hashBytes(sourceContents)
 	if request.SourceSHA256 != currentSourceHash {
 		writeReviewError(w, &reviewAPIError{
 			Status:  http.StatusConflict,
@@ -190,7 +192,7 @@ func (s *fileServer) serveReviewSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, existingRevision, exists, apiErr := readReviewDocument(target)
+	existingDocument, existingRevision, exists, apiErr := readReviewDocument(target)
 	if apiErr != nil {
 		writeReviewError(w, apiErr)
 		return
@@ -227,6 +229,29 @@ func (s *fileServer) serveReviewSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	contents = append(contents, '\n')
+	if exists {
+		previousContents, err := os.ReadFile(target.ReviewFull)
+		if err != nil {
+			writeReviewError(w, internalReviewError("read previous review", err))
+			return
+		}
+		if hashBytes(previousContents) != existingRevision {
+			writeReviewError(w, &reviewAPIError{Status: http.StatusConflict, Code: "review_changed", Message: "the saved review changed during submission"})
+			return
+		}
+		var previousSource []byte
+		if existingDocument.Source.SHA256 == currentSourceHash {
+			previousSource = sourceContents
+		}
+		if err := archiveReview(target, existingDocument.Source.SHA256, previousSource, previousContents); err != nil {
+			writeReviewError(w, internalReviewError("archive previous review", err))
+			return
+		}
+	}
+	if err := archiveReview(target, currentSourceHash, sourceContents, contents); err != nil {
+		writeReviewError(w, internalReviewError("archive review", err))
+		return
+	}
 
 	created, err := atomicWriteReview(target.ReviewFull, contents)
 	if err != nil {
@@ -276,6 +301,11 @@ func (s *fileServer) reviewTarget(document string) (reviewTarget, *reviewAPIErro
 		return reviewTarget{}, &reviewAPIError{Status: http.StatusNotFound, Code: "source_not_found", Message: "source document not found"}
 	}
 	canonicalRel = filepath.ToSlash(canonicalRel)
+	for _, segment := range strings.Split(canonicalRel, "/") {
+		if strings.HasSuffix(segment, ".review-history") {
+			return reviewTarget{}, &reviewAPIError{Status: http.StatusNotFound, Code: "source_not_found", Message: "review history snapshots are read-only"}
+		}
+	}
 	reviewFull := filepath.Join(filepath.Dir(fullPath), filepath.Base(fullPath)+".review.json")
 	reviewRel, err := filepath.Rel(s.realRoot, reviewFull)
 	if err != nil || reviewRel == ".." || strings.HasPrefix(reviewRel, ".."+string(filepath.Separator)) || filepath.IsAbs(reviewRel) {
@@ -520,6 +550,96 @@ func matchingRevision(requested *string, current string, exists bool) bool {
 		return requested == nil
 	}
 	return requested != nil && *requested == current
+}
+
+// archiveReview keeps immutable, content-addressed copies of every submitted
+// review. A source snapshot is written once per HTML hash. Legacy reviews whose
+// source has already changed retain their comments without an unavailable HTML.
+func archiveReview(target reviewTarget, sourceHash string, source, review []byte) error {
+	if !validSHA256(sourceHash) {
+		return errors.New("invalid source hash for review history")
+	}
+	base := target.SourceFull + ".review-history"
+	versionDir := filepath.Join(base, strings.TrimPrefix(sourceHash, "sha256:"))
+	reviewsDir := filepath.Join(versionDir, "reviews")
+	for _, dir := range []string{base, versionDir, reviewsDir} {
+		if err := ensureReviewHistoryDir(dir); err != nil {
+			return err
+		}
+	}
+	if source != nil {
+		if hashBytes(source) != sourceHash {
+			return errors.New("source snapshot does not match its hash")
+		}
+		if err := writeImmutableReviewFile(filepath.Join(versionDir, "source.html"), source); err != nil {
+			return err
+		}
+	}
+	revision := strings.TrimPrefix(hashBytes(review), "sha256:")
+	return writeImmutableReviewFile(filepath.Join(reviewsDir, revision+".json"), review)
+}
+
+func ensureReviewHistoryDir(dir string) error {
+	if err := os.Mkdir(dir, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("review history path is not a directory: %s", dir)
+	}
+	return nil
+}
+
+func writeImmutableReviewFile(filename string, contents []byte) error {
+	if info, err := os.Lstat(filename); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("review history path is not a regular file: %s", filename)
+		}
+		existing, err := os.ReadFile(filename)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(existing, contents) {
+			return fmt.Errorf("review history content differs: %s", filename)
+		}
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	dir := filepath.Dir(filename)
+	temp, err := os.CreateTemp(dir, ".data-overmind-history-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name())
+	if _, err := temp.Write(contents); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := os.Link(temp.Name(), filename); err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		existing, readErr := os.ReadFile(filename)
+		if readErr != nil || !bytes.Equal(existing, contents) {
+			return fmt.Errorf("review history content differs: %s", filename)
+		}
+	}
+	if directory, err := os.Open(dir); err == nil {
+		_ = directory.Sync()
+		_ = directory.Close()
+	}
+	return nil
 }
 
 func atomicWriteReview(filename string, contents []byte) (bool, error) {

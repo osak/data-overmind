@@ -58,6 +58,23 @@ func TestRun(t *testing.T) {
 			t.Fatalf("stdout = %q", stdout.String())
 		}
 	})
+
+	t.Run("archived review", func(t *testing.T) {
+		archived := filepath.Join(dir, "archived.json")
+		if err := os.WriteFile(archived, reviewBytes, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(documentPath + ".review.json"); err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"--review", archived, documentPath}, &stdout, &stderr); code != 0 {
+			t.Fatalf("code = %d, stderr = %q", code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Source: current") {
+			t.Fatalf("stdout = %q", stdout.String())
+		}
+	})
 }
 
 func TestRunRejectsBadArguments(t *testing.T) {
